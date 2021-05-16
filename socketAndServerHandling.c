@@ -10,38 +10,38 @@ int createUDPSocket()
 	return socketFD;
 }
 
-struct sockaddr_in* createServerAddres(struct in_addr ip, int port)
+struct sockaddr_in* createServerAddres(struct in_addr* ip, int port)
 {
 	struct sockaddr_in *serverAddress;
 	bzero(serverAddress, sizeof(*serverAddress));
 	serverAddress->sin_family = AF_INET;
 	serverAddress->sin_port = htons(port);
-	serverAddress->sin_addr = ip;
+	serverAddress->sin_addr = *ip;
 	return serverAddress;
 }
 
-void sendRequest(int sockFD, struct sockaddr_in* serverAddress, char* requestMessage)
+void sendRequest(int socketFD, struct sockaddr_in* serverAddress, char* requestMessage)
 {
 	ssize_t messageLength = strlen(requestMessage);
-	if (sendto(sockFD, requestMessage, messageLength, 0, (struct sockaddr*)serverAddress, sizeof(serverAddress)) == -1)
+	if (sendto(socketFD, requestMessage, messageLength, 0, (struct sockaddr*)serverAddress, sizeof(serverAddress)) == -1)
 	{
 		fprintf(stderr, "Sending request error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 }
 
-bool handleResponse(int sockFD, struct in_addr expectedIp, int expectedPort, char** descinationOfResponse)
+bool handleResponse(int socketFD, struct in_addr* expectedIp, in_port_t expectedPort, char** descinationOfResponse)
 {
 	struct sockaddr_in *senderAddress;
 	socklen_t senderAddressLength = sizeof(*senderAddress);
 	bzero(senderAddress, senderAddressLength);
 	char responseBuffer[MAX_RESPONSE_SIZE];
-	if (recvfrom(sockFD, responseBuffer, MAX_RESPONSE_SIZE, 0, (struct sockaddr*)senderAddress, &senderAddressLength) == -1)
+	if(recvfrom(socketFD, responseBuffer, MAX_RESPONSE_SIZE, 0, (struct sockaddr*)senderAddress, &senderAddressLength) == -1)
 	{
 		fprintf(stderr, "Receving response error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	if (senderAddress->sin_addr.s_addr != expectedIp.s_addr || senderAddress->sin_port != htons(expectedPort))
+	if(senderAddress->sin_addr.s_addr != (*expectedIp).s_addr || senderAddress->sin_port != expectedPort)
 	{
 		return false;
 	}

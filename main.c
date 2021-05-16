@@ -1,23 +1,24 @@
 #include "utilities.h"
-#include "socketAndServerHandling.h"
+#include "slidingWindow.h"
 
-void downloadFile(struct in_addr ipAddress, int port, FILE* outputFile, int totalSize)
+void downloadFile(struct in_addr* ipAddress, int port, FILE* outputFile, int totalSize)
 {
 	int downloadedData = 0;
+    setupSlidingWindow(totalSize, ipAddress, port);
 	while(downloadedData < totalSize)
 	{
-		requestForPackages(ipAddress, port);
-		recivePackages(ipAddress, port);
-		slideWindow();
-		writeDownloadedDataToFile(outputFile);
-		downloadedData = returnProgress();
+		requestForData();
+		downloadData();
+		slideWindowAndWriteDownloadedData(outputFile);
+		downloadedData = returnProgressOnDownladingData();
 		printf("Downloaded %d from %d bytes.", downloadedData, totalSize);
 	}
+    cleanupSlidingWindow();
 }
 
 int main(int argc, char* argv[])
 {
-	struct in_addr ipAddress;
+	struct in_addr* ipAddress;
 	int port;
 	FILE* outputFile;
 	int totalSize;
@@ -26,7 +27,7 @@ int main(int argc, char* argv[])
 		fprintf(stderr, "Usage: ./transport [ip address] [port] [output file name] [number of bytes to be downloaded]\n");
 		return EXIT_FAILURE;
 	}
-	if(inet_pton(AF_INET, argv[1], &ipAddress) != 1)
+	if(inet_pton(AF_INET, argv[1], ipAddress) != 1)
 	{
 		fprintf(stderr, "Parsing ip addres failed.");
 		return EXIT_FAILURE;
