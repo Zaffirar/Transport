@@ -13,9 +13,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MAX_REQUESTED_SEGMENT_SIZE 100
+#define MAX_REQUESTED_SEGMENT_SIZE 1000
 #define MAX_RESPONSE_SIZE 1100
-#define WINDOW_SIZE 4
-#define TIMEOUT_IN_MILISECONDS 2000
+#define WINDOW_SIZE 2000
+#define TIMEOUT_IN_MILISECONDS 700
 
 #endif

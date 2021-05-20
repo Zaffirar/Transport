@@ -2,7 +2,7 @@
 #include "slidingWindow.h"
 #include "socketAndServerHandling.h"
 
-int lastACKReceived, lastSegmentWrittenToFile, socketFD, sizeOfFile;
+int lastACKReceived, socketFD, sizeOfFile;
 struct sockaddr_in serverAddress;
 struct segment
 {
@@ -11,16 +11,16 @@ struct segment
 	char data[MAX_REQUESTED_SEGMENT_SIZE];
 }*segments;
 
-void resetSegment(int indexOfSegmnet)
+void ResetSegment(int indexOfSegmnet)
 {
 	segments[indexOfSegmnet].isDownloaded = false;
 	bzero(segments[indexOfSegmnet].data, MAX_REQUESTED_SEGMENT_SIZE);
 	gettimeofday(&segments[indexOfSegmnet].requestTime, NULL);
 }
 
-int getSegmentSize(int numberOfSegmentInOrder)
+int GetSegmentSize(int numberOfSegmentInOrder)
 {
-	if(numberOfSegmentInOrder * MAX_REQUESTED_SEGMENT_SIZE < sizeOfFile)
+	if((numberOfSegmentInOrder + 1) * MAX_REQUESTED_SEGMENT_SIZE <= sizeOfFile)
 	{
 		return MAX_REQUESTED_SEGMENT_SIZE;
 	}
@@ -30,10 +30,9 @@ int getSegmentSize(int numberOfSegmentInOrder)
 	}
 }
 
-void setupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
+void SetupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
 {
 	lastACKReceived = -1;
-	lastSegmentWrittenToFile = -1;
 	sizeOfFile = totalSize;
 	segments = malloc(sizeof(struct segment)*WINDOW_SIZE);
 	if(segments == NULL)
@@ -41,20 +40,20 @@ void setupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
 		fprintf(stderr, "Allocating memory error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	if(atexit(cleanupSlidingWindow) != 0)
+	if(atexit(CleanupSlidingWindow) != 0)
 	{
 		fprintf(stderr, "Atexit error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	socketFD = createUDPSocket();
-	serverAddress = createServerAddres(ipAddress, port);
+	socketFD = CreateUDPSocket();
+	serverAddress = CreateServerAddres(ipAddress, port);
 	for(int i=0;i<WINDOW_SIZE;i++)
 	{
-		resetSegment(i);
+		ResetSegment(i);
 	}
 }
 
-char* createDownloadMesage(int start, int length)
+char* CreateDownloadMesage(int start, int length)
 {
 	static char message[20];
 	if(sprintf(message, "GET %d %d\n", start, length) < 0)
@@ -65,7 +64,7 @@ char* createDownloadMesage(int start, int length)
 	return message;
 }
 
-bool isTimedOut(int indexOfSegment)
+bool IsTimedOut(int indexOfSegment)
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
@@ -79,29 +78,29 @@ bool isTimedOut(int indexOfSegment)
 	return timePassed > TIMEOUT_IN_MILISECONDS;
 }
 
-void requestForData()
+void RequestForData()
 {
 	for(int i=0;i<WINDOW_SIZE;i++)
 	{
-		if(!segments[i].isDownloaded && isTimedOut(i))
+		if(!segments[i].isDownloaded && IsTimedOut(i))
 		{
 			int segmentInOrder = lastACKReceived + 1 + i;
-			if((segmentInOrder) * MAX_REQUESTED_SEGMENT_SIZE + getSegmentSize(segmentInOrder) > sizeOfFile ||
-				getSegmentSize(segmentInOrder) == 0)
+			if(segmentInOrder * MAX_REQUESTED_SEGMENT_SIZE + 
+				GetSegmentSize(segmentInOrder) > sizeOfFile ||
+				GetSegmentSize(segmentInOrder) == 0)
 			{
 				continue;
 			}
-			char* message = createDownloadMesage(
-				segmentInOrder * MAX_REQUESTED_SEGMENT_SIZE,
-				getSegmentSize(segmentInOrder));
-			resetSegment(i);
-			printf("Pytam! %s\n", message);
-			sendRequest(socketFD, &serverAddress, message);
+			char* message = CreateDownloadMesage(
+				segmentInOrder * MAX_REQUESTED_SEGMENT_SIZE, 
+				GetSegmentSize(segmentInOrder));
+			ResetSegment(i);
+			SendRequest(socketFD, &serverAddress, message);
 		}
 	}
 }
 
-void parseResponse(char* responseMessage)
+void ParseResponse(char* responseMessage, int responseMessageLength)
 {
 	int start, length;
 	if(sscanf(responseMessage, "DATA %d %d", &start, &length) != 2)
@@ -109,60 +108,55 @@ void parseResponse(char* responseMessage)
 		fprintf(stderr, "Sscanf error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
-	if(start < lastACKReceived * MAX_REQUESTED_SEGMENT_SIZE ||
+	if(start <= lastACKReceived * MAX_REQUESTED_SEGMENT_SIZE ||
 		start > (lastACKReceived + WINDOW_SIZE) * MAX_REQUESTED_SEGMENT_SIZE)
 	{
 		return;
 	}
-	printf("Mam odpowiedź! Start: %d długość: %d\n", start, length);
 	int segmentIndex = (start/MAX_REQUESTED_SEGMENT_SIZE) - (lastACKReceived + 1);
 	if(segments[segmentIndex].isDownloaded)
 	{
 		return;
 	}
 	segments[segmentIndex].isDownloaded=true;
-	int i = 0;
-	while(responseMessage[i] != '\n')
-	{
-		i++;
-	}
-	i++;
+	int i = responseMessageLength - length;
 	memcpy(segments[segmentIndex].data, &responseMessage[i], length);
 }
 
-void downloadData()
+void DownloadData()
 {
 	struct timeval timeout;
 	timeout.tv_sec = 0;
-	timeout.tv_usec = TIMEOUT_IN_MILISECONDS;
+	timeout.tv_usec = TIMEOUT_IN_MILISECONDS*5;
 	fd_set descriptors;
 	FD_ZERO(&descriptors);
 	FD_SET(socketFD, &descriptors);
 	char* responseMessage;
+	int messageLength;
 	while(select(socketFD + 1, &descriptors, NULL, NULL, &timeout) > 0)
 	{
-		if(handleResponse(socketFD, serverAddress.sin_addr,
-			serverAddress.sin_port, &responseMessage) == false)
+		messageLength = HandleResponse(socketFD, serverAddress.sin_addr, 
+			serverAddress.sin_port, &responseMessage);
+		if(messageLength == 0)
 		{
 			continue;
 		}
-		parseResponse(responseMessage);
+		ParseResponse(responseMessage, messageLength);
 	}
 }
-void slideWindowAndWriteDownloadedData(FILE* outputFile)
+void SlideWindowAndWriteDownloadedData(FILE* outputFile)
 {
 	int i=0, j=0;
-	while(segments[i].isDownloaded)
+	while(i<WINDOW_SIZE && segments[i].isDownloaded)
 	{
 		lastACKReceived++;
-		size_t segmentSize=getSegmentSize(lastSegmentWrittenToFile+1);
+		size_t segmentSize=GetSegmentSize(lastACKReceived);
 		if(fwrite(segments[i].data, sizeof(char), segmentSize, outputFile) != segmentSize)
 		{
 			fprintf(stderr, "Write error: %s\n", strerror(errno));
 			exit(EXIT_FAILURE);
 		}
-		lastSegmentWrittenToFile++;
-		resetSegment(i);
+		ResetSegment(i);
 		i++;
 	}
 	if(i == 0)
@@ -172,21 +166,21 @@ void slideWindowAndWriteDownloadedData(FILE* outputFile)
 	while(i<WINDOW_SIZE)
 	{
 		segments[j]=segments[i];
-		resetSegment(i);
+		ResetSegment(i);
 		i++;
 		j++;
 	}
+	printf("Downloaded %d from %d bytes.\n", ReturnProgressOnDownladingData(), sizeOfFile);
 }
 
-int returnProgressOnDownladingData()
+int ReturnProgressOnDownladingData()
 {
-	int downloadedData = (lastSegmentWrittenToFile - 1) * MAX_REQUESTED_SEGMENT_SIZE
-		+ getSegmentSize(lastSegmentWrittenToFile);
-
+	int downloadedData = lastACKReceived * MAX_REQUESTED_SEGMENT_SIZE
+		+ GetSegmentSize(lastACKReceived);
 	return downloadedData > 0 ? downloadedData : 0;
 }
 
-void cleanupSlidingWindow()
+void CleanupSlidingWindow()
 {
 	free(segments);
 }

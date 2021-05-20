@@ -1,19 +1,17 @@
 #include "utilities.h"
 #include "slidingWindow.h"
 
-void downloadFile(struct in_addr* ipAddress, int port, FILE* outputFile, int totalSize)
+void DownloadFile(struct in_addr* ipAddress, int port, FILE* outputFile, int totalSize)
 {
 	int downloadedData = 0;
-	setupSlidingWindow(totalSize, ipAddress, port);
+	SetupSlidingWindow(totalSize, ipAddress, port);
 	while(downloadedData < totalSize)
 	{
-		requestForData();
-		downloadData();
-		slideWindowAndWriteDownloadedData(outputFile);
-		downloadedData = returnProgressOnDownladingData();
-		printf("Downloaded %d from %d bytes.\n", downloadedData, totalSize);
+		RequestForData();
+		DownloadData();
+		SlideWindowAndWriteDownloadedData(outputFile);
+		downloadedData = ReturnProgressOnDownladingData();
 	}
-	cleanupSlidingWindow();
 }
 
 int main(int argc, char* argv[])
@@ -41,7 +39,7 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 	totalSize = atoi(argv[4]);
-	downloadFile(&ipAddress, port, outputFile, totalSize);
+	DownloadFile(&ipAddress, port, outputFile, totalSize);
 	fclose(outputFile);
 	return EXIT_SUCCESS;
 }
