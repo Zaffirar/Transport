@@ -1,20 +1,24 @@
 CC = gcc
-CFLAGS =  -std=gnu99 -Wextra -Wall -Wno-unused-parameter -Werror #-g3 -fsanitize=address
 
-TARGET = transport
+CPPFLAGS = -MMD -Wall -Wextra -Werror
+CFLAGS = -std=gnu99 -O2 -fomit-frame-pointer
+LDFLAGS = -Wl,-O2
 
-SRCS = slidingWindow.c socketAndServerHandling.c main.c
-OBJS = slidingWindow.o socketAndServerHandling.o main.o
+
+SRCS = slidingWindow.c socketAndServerHandling.c transport.c
+OBJS = $(subst .c,.o, $(SRCS)) transport
+DEPS = $(subst .c,.d, $(SRCS))
 
 .PHONY: all clean distclean
 
-all = $(TARGET)
+all: transport
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+transport: slidingWindow.o socketAndServerHandling.o transport.o
 
 clean:
-		$(RM) $(OBJS) 
+	rm -f *.o *.d
 
-distclean:
-		$(RM) $(OBJS) $(TARGET)
+distclean: clean
+	rm -f transport
+
+-include $(DEPS)

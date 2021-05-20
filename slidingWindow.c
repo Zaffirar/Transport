@@ -2,9 +2,9 @@
 #include "slidingWindow.h"
 #include "socketAndServerHandling.h"
 
-int lastACKReceived, socketFD, sizeOfFile;
-struct sockaddr_in serverAddress;
-struct segment
+static int lastACKReceived, socketFD, sizeOfFile;
+static struct sockaddr_in serverAddress;
+static struct segment
 {
 	bool isDownloaded;
 	struct timeval requestTime;
@@ -14,8 +14,11 @@ struct segment
 void ResetSegment(int indexOfSegmnet)
 {
 	segments[indexOfSegmnet].isDownloaded = false;
-	bzero(segments[indexOfSegmnet].data, MAX_REQUESTED_SEGMENT_SIZE);
-	gettimeofday(&segments[indexOfSegmnet].requestTime, NULL);
+	if(gettimeofday(&segments[indexOfSegmnet].requestTime, NULL) == -1)
+	{
+		fprintf(stderr, "gettimeofday error: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
 }
 
 int GetSegmentSize(int numberOfSegmentInOrder)
@@ -30,7 +33,7 @@ int GetSegmentSize(int numberOfSegmentInOrder)
 	}
 }
 
-void SetupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
+void SetupSlidingWindow(int totalSize, struct in_addr* ipAddress, short port)
 {
 	lastACKReceived = -1;
 	sizeOfFile = totalSize;
@@ -38,11 +41,6 @@ void SetupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
 	if(segments == NULL)
 	{
 		fprintf(stderr, "Allocating memory error: %s\n", strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-	if(atexit(CleanupSlidingWindow) != 0)
-	{
-		fprintf(stderr, "Atexit error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
 	}
 	socketFD = CreateUDPSocket();
@@ -55,8 +53,8 @@ void SetupSlidingWindow(int totalSize, struct in_addr* ipAddress, int port)
 
 char* CreateDownloadMesage(int start, int length)
 {
-	static char message[20];
-	if(sprintf(message, "GET %d %d\n", start, length) < 0)
+	static char message[MAX_REQEST_MESSAGE_LENGTH];
+	if(snprintf(message, MAX_REQEST_MESSAGE_LENGTH, "GET %d %d\n", start, length) < 0)
 	{
 		fprintf(stderr, "Sprintf error: %s\n", strerror(errno));
 		exit(EXIT_FAILURE);
@@ -67,15 +65,19 @@ char* CreateDownloadMesage(int start, int length)
 bool IsTimedOut(int indexOfSegment)
 {
 	struct timeval now;
-	gettimeofday(&now, NULL);
+	if(gettimeofday(&now, NULL) == -1)
+	{
+		fprintf(stderr, "gettimeofday error: %s\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
 	if (now.tv_usec < segments[indexOfSegment].requestTime.tv_usec)
 	{
 		now.tv_usec += 1000;
 		now.tv_sec--;
 	}
-	double timePassed = (now.tv_sec - segments[indexOfSegment].requestTime.tv_sec) * 1000
+	int timePassed = (now.tv_sec - segments[indexOfSegment].requestTime.tv_sec) * 1000
 		+ (now.tv_usec - segments[indexOfSegment].requestTime.tv_usec);
-	return timePassed > TIMEOUT_IN_MILISECONDS;
+	return timePassed > SEGMENT_TIMEOUT;
 }
 
 void RequestForData()
@@ -84,16 +86,17 @@ void RequestForData()
 	{
 		if(!segments[i].isDownloaded && IsTimedOut(i))
 		{
-			int segmentInOrder = lastACKReceived + 1 + i;
+			int segmentInOrder = lastACKReceived + 1 + i, 
+                segmentSize = GetSegmentSize(segmentInOrder);
 			if(segmentInOrder * MAX_REQUESTED_SEGMENT_SIZE + 
-				GetSegmentSize(segmentInOrder) > sizeOfFile ||
-				GetSegmentSize(segmentInOrder) == 0)
+				segmentSize > sizeOfFile ||
+				segmentSize == 0)
 			{
 				continue;
 			}
 			char* message = CreateDownloadMesage(
 				segmentInOrder * MAX_REQUESTED_SEGMENT_SIZE, 
-				GetSegmentSize(segmentInOrder));
+				segmentSize);
 			ResetSegment(i);
 			SendRequest(socketFD, &serverAddress, message);
 		}
@@ -127,7 +130,7 @@ void DownloadData()
 {
 	struct timeval timeout;
 	timeout.tv_sec = 0;
-	timeout.tv_usec = TIMEOUT_IN_MILISECONDS*3;
+	timeout.tv_usec = SOCKET_TIMEOUT;
 	fd_set descriptors;
 	FD_ZERO(&descriptors);
 	FD_SET(socketFD, &descriptors);
@@ -183,4 +186,5 @@ int ReturnProgressOnDownladingData()
 void CleanupSlidingWindow()
 {
 	free(segments);
+    CloseUDPSocket(socketFD);
 }

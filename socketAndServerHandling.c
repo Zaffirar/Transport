@@ -11,7 +11,7 @@ int CreateUDPSocket()
 	return socketFD;
 }
 
-struct sockaddr_in CreateServerAddres(struct in_addr* ip, int port)
+struct sockaddr_in CreateServerAddres(struct in_addr* ip, short port)
 {
 	struct sockaddr_in serverAddress;
 	bzero(&serverAddress, sizeof(serverAddress));
