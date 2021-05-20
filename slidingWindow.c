@@ -127,7 +127,7 @@ void DownloadData()
 {
 	struct timeval timeout;
 	timeout.tv_sec = 0;
-	timeout.tv_usec = TIMEOUT_IN_MILISECONDS*5;
+	timeout.tv_usec = TIMEOUT_IN_MILISECONDS*3;
 	fd_set descriptors;
 	FD_ZERO(&descriptors);
 	FD_SET(socketFD, &descriptors);
